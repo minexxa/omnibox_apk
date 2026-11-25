@@ -1,0 +1,45 @@
+[package]
+name = "omnibox_core"
+version = "0.1.0"
+edition = "2021"
+description = "OmniBox 内核：豆瓣推荐 + QuickJS 动态影视脚本源。无网页面板、无 HTTP 服务，编译为 cdylib（Android .so）供 APK 通过 JNI 调用"
+
+[lib]
+name = "omnibox_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util", "fs"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.22"
+urlencoding = "2"
+anyhow = "1"
+futures = "0.3"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+ecb = { version = "0.1", features = ["alloc"] }
+md-5 = "0.10"
+sha1 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.10", features = ["oid"] }
+rsa = "0.9"
+rand = "0.8"
+rquickjs = { version = "0.14", features = ["futures", "parallel", "macro"] }
+scraper = { version = "0.29", features = ["atomic", "deterministic"] }
+ego-tree = "0.11.1"
+
+# Android 目标 rquickjs-sys 未预置 bindings，需现场用 bindgen 生成
+[target.'cfg(target_os = "android")'.dependencies]
+rquickjs = { version = "0.14", features = ["bindgen"] }
+# JNI 桥（供 Kotlin 端 OmniBoxNative 调用）
+jni = "0.21"
+
+[profile.release]
+opt-level = "s"
+strip = true
+lto = "fat"
+codegen-units = 1
+# cdylib 不能 panic=abort 跨 FFI 边界，保持 unwind
+panic = "unwind"
+debug = false
