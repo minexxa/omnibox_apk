@@ -1,16 +1,25 @@
 package com.omnibox.app.ui.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,19 +29,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omnibox.app.OmniBoxApp
 import com.omnibox.app.data.Core
 import com.omnibox.app.data.ListResult
 import com.omnibox.app.data.parseListResult
+import com.omnibox.app.ui.components.DoubanPoster
 import com.omnibox.app.ui.components.StateBox
-import com.omnibox.app.ui.components.TopBarButton
-import com.omnibox.app.ui.components.VodCard
-import org.json.JSONObject
+import com.omnibox.app.ui.components.TvFocusable
 
+/**
+ * 搜索结果页（忠实对齐 ubox SearchResultsScreen 的 TV 布局）：
+ *   顶部：标题 + 搜索进度条
+ *   左侧（160dp）：源筛选栏 —— 「全部」+ 有结果的各来源站
+ *   右侧：4 列固定宽度海报网格（ubox VodPoster 样式，左上角来源角标）
+ *   底部：分页（上一页 / x / y / 下一页）
+ */
 @Composable
 fun SearchResultsScreen(
     query: String,
@@ -44,7 +62,6 @@ fun SearchResultsScreen(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
     var page by remember { mutableStateOf(1) }
-    // 来源过滤：all 或脚本 id
     var sourceFilter by remember { mutableStateOf("all") }
 
     LaunchedEffect(query, page) {
@@ -74,48 +91,144 @@ fun SearchResultsScreen(
     }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            TopBarButton("返回") { onBack() }
-            Text("搜索：$query", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp))
+        // 顶部标题 + 进度条
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TopBackButton(onBack)
+            Text(
+                "搜索结果：$query", color = Color.White, fontSize = 20.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
-
-        // 来源过滤条
-        if (sources.size > 1) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("来源：", color = Color.Gray, fontSize = 14.sp)
-                TopBarButton("全部") { sourceFilter = "all" }
-                sources.forEach { s -> TopBarButton(s) { sourceFilter = s } }
-            }
+        if (loading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp), color = com.omnibox.app.ui.theme.AppColors.Accent)
+        } else {
+            Spacer(Modifier.height(3.dp))
         }
 
         when {
             loading && result == null -> StateBox(loading = true, error = "")
-            shown.isEmpty() -> StateBox(loading = false, error = error.ifEmpty { "没有找到相关资源" })
+            shown.isEmpty() && !loading -> StateBox(loading = false, error = error.ifEmpty { "没有搜索结果" })
             else -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(160.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize().weight(1f),
-                ) {
-                    itemsIndexed(shown) { idx, vod ->
-                        VodCard(vod, autofocus = idx == 0, badge = vod.source.ifBlank { null }) {
-                            onOpenDetail(vod.source, vod.vodId, vod.name, vod.pic)
+                Row(Modifier.fillMaxSize()) {
+                    // 左侧源筛选栏
+                    Box(Modifier.width(160.dp)) {
+                        LazyColumn(
+                            Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 6.dp, top = 4.dp, end = 4.dp, bottom = 12.dp),
+                        ) {
+                            item {
+                                SourceTile(
+                                    name = "全部",
+                                    selected = sourceFilter == "all",
+                                    onClick = { sourceFilter = "all" },
+                                )
+                            }
+                            items(sources) { s ->
+                                SourceTile(
+                                    name = s,
+                                    selected = sourceFilter == s,
+                                    onClick = { sourceFilter = s },
+                                )
+                            }
+                        }
+                    }
+                    // 右侧 4 列海报网格
+                    Box(Modifier.weight(1f)) {
+                        Column(Modifier.fillMaxSize()) {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(4),
+                                modifier = Modifier.fillMaxSize().weight(1f),
+                                contentPadding = PaddingValues(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp),
+                            ) {
+                                itemsIndexed(shown) { idx, vod ->
+                                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        DoubanPoster(
+                                            vod = vod,
+                                            autofocus = idx == 0,
+                                            badge = vod.source.ifBlank { null },
+                                            note = vod.remarks.ifBlank { null },
+                                            width = 150.dp,
+                                        ) {
+                                            onOpenDetail(vod.source, vod.vodId, vod.name, vod.pic)
+                                        }
+                                    }
+                                }
+                            }
+                            // 分页
+                            Row(
+                                Modifier.fillMaxWidth().padding(10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                TvPill("上一页", enabled = page > 1) { if (page > 1) page-- }
+                                Text(" $page / ${result?.pagecount ?: 1} ", color = Color.White, fontSize = 15.sp,
+                                    modifier = Modifier.padding(horizontal = 16.dp))
+                                TvPill("下一页", enabled = page < (result?.pagecount ?: 1)) {
+                                    if (page < (result?.pagecount ?: 1)) page++
+                                }
+                            }
                         }
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TopBarButton("上一页") { if (page > 1) page-- }
-                    Text(" $page / ${result!!.pagecount} ", color = Color.White, fontSize = 15.sp)
-                    TopBarButton("下一页") { if (page < result!!.pagecount) page++ }
-                }
             }
         }
+    }
+}
+
+@Composable
+private fun SourceTile(name: String, selected: Boolean, onClick: () -> Unit) {
+    TvFocusable(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).height(52.dp),
+        radius = 12.dp,
+        scale = 1f,
+        onClick = onClick,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .border(
+                    width = if (selected) 1.5.dp else 0.dp,
+                    color = if (selected) Color.White else Color.Transparent,
+                    shape = RoundedCornerShape(12.dp),
+                )
+                .background(if (selected) Color(0x33FFFFFF) else Color.Transparent, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                name, color = Color.White, fontSize = 17.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBackButton(onBack: () -> Unit) {
+    TvFocusable(onClick = onBack, radius = 8.dp) {
+        Text(
+            "返回", color = Color.White, fontSize = 16.sp,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                .background(Color(0x6C3D3D3D)).padding(horizontal = 16.dp, vertical = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun TvPill(label: String, enabled: Boolean, onClick: () -> Unit) {
+    TvFocusable(enabled = enabled, radius = 18.dp, scale = 1f, onClick = onClick) {
+        Text(
+            label, color = if (enabled) Color.White else Color.Gray, fontSize = 15.sp,
+            modifier = Modifier.clip(RoundedCornerShape(18.dp))
+                .background(if (enabled) Color(0x6C3D3D3D) else Color(0x33333333))
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+        )
     }
 }

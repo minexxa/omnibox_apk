@@ -46,13 +46,23 @@ import com.omnibox.app.data.Vod
 import com.omnibox.app.data.rememberImage
 import com.omnibox.app.ui.theme.AppColors
 
-/** TV 可聚焦容器：焦点时放大 + 白色描边 + 底色，遥控器点击触发 onClick。 */
+/**
+ * TV 可聚焦容器：焦点时描边（默认也轻微放大），遥控器 DPAD 中心键触发 onClick。
+ * 参数对齐 ubox 的 TvFocusable，便于忠实还原其 TV 页面：
+ * - radius/borderColor/showBorder 控制焦点描边；
+ * - scale=1f 可关闭放大，只保留描边（ubox 详情页按钮即用此方式）；
+ * - onFocusChanged 供按钮在获得焦点时改变自身配色。
+ */
 @Composable
 fun TvFocusable(
     modifier: Modifier = Modifier,
     autofocus: Boolean = false,
     enabled: Boolean = true,
     scale: Float = 1.05f,
+    radius: androidx.compose.ui.unit.Dp = 10.dp,
+    borderColor: Color = AppColors.FocusBorder,
+    showBorder: Boolean = true,
+    onFocusChanged: ((Boolean) -> Unit)? = null,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -60,24 +70,26 @@ fun TvFocusable(
     val focused by interaction.collectIsFocusedAsState()
     val requester = remember { FocusRequester() }
     val anim by animateFloatAsState(if (focused && enabled) scale else 1f, label = "focus")
+    LaunchedEffect(focused) { onFocusChanged?.invoke(focused) }
     LaunchedEffect(autofocus) {
         if (autofocus && enabled) {
             runCatching { requester.requestFocus() }
         }
     }
+    val shape = RoundedCornerShape(radius)
     Surface(
         modifier = modifier
             .scale(anim)
             .focusRequester(requester)
             .focusable(enabled = enabled, interactionSource = interaction)
             .clickable(enabled = enabled, interactionSource = interaction, indication = null) { onClick() }
-            .clip(RoundedCornerShape(10.dp))
+            .clip(shape)
             .then(
-                if (focused && enabled) Modifier.border(2.dp, AppColors.FocusBorder, RoundedCornerShape(10.dp))
+                if (focused && enabled && showBorder) Modifier.border(2.dp, borderColor, shape)
                 else Modifier
             ),
         color = if (focused && enabled) AppColors.FocusFill else Color.Transparent,
-        shape = RoundedCornerShape(10.dp),
+        shape = shape,
     ) { content() }
 }
 
@@ -152,17 +164,22 @@ fun VodCard(
 }
 
 /**
- * 豆瓣热播海报卡片 —— 完全对齐 ubox 的 VodPoster 显示：
- * 圆角海报(aspect 0.68) + 左上角评分角标 + 底部黑底白字片名栏。
+ * ubox 风格海报卡片（对齐 ubox VodPoster）：
+ * 圆角海报(aspect 0.68) + 左上角角标(来源/评分) + 底部黑底白字片名栏。
+ * - badge：左上角角标（搜索结果页传来源站名；首页热播传空，改显示评分）
+ * - note：底部片名栏上方的备注（如 "x.x 分"）
  */
 @Composable
 fun DoubanPoster(
     vod: Vod,
     modifier: Modifier = Modifier,
     autofocus: Boolean = false,
+    badge: String? = null,
+    note: String? = null,
+    width: androidx.compose.ui.unit.Dp = 150.dp,
     onClick: () -> Unit,
 ) {
-    TvFocusable(modifier = modifier.width(150.dp), autofocus = autofocus, onClick = onClick) {
+    TvFocusable(modifier = modifier.width(width), autofocus = autofocus, onClick = onClick) {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -179,10 +196,13 @@ fun DoubanPoster(
                     textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center),
                 )
             }
-            // 左上角评分角标（ubox: 半透明黑底 "x.x 分"）
-            if (vod.score.isNotEmpty()) {
+            // 左上角角标：优先 badge（来源站名），否则评分
+            val topBadge = badge?.takeIf { it.isNotBlank() }
+                ?: vod.score.takeIf { it.isNotEmpty() }?.let { "$it 分" }
+            if (topBadge != null) {
                 Text(
-                    "${vod.score} 分", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    topBadge, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(4.dp)
@@ -190,18 +210,29 @@ fun DoubanPoster(
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
-            // 底部黑底白字片名栏（ubox: 居中、单行省略）
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color(0x8C000000))
-                    .padding(horizontal = 4.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    vod.name, color = Color.White, fontSize = 13.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                )
+            // 底部：备注角标 + 黑底白字片名栏
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                val bottomNote = note?.takeIf { it.isNotBlank() }
+                    ?: vod.remarks.takeIf { it.isNotEmpty() }
+                if (bottomNote != null) {
+                    Text(
+                        bottomNote, color = Color.White, fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                            .background(Color(0x8C000000), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x8C000000))
+                        .padding(horizontal = 4.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        vod.name, color = Color.White, fontSize = 13.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
