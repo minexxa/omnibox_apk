@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -81,6 +82,8 @@ fun VodScreen(
     var playPosition by remember { mutableStateOf(0L) }
     var playDuration by remember { mutableStateOf(0L) }
     var buffering by remember { mutableStateOf(false) }
+    // 视频原始宽高比（宽/高），未拿到尺寸前用 16:9 占位
+    var videoAspect by remember { mutableStateOf(16f / 9f) }
 
     val engine = remember {
         ExoEngine(OmniBoxApp.ctx, prefs.decoder).apply {
@@ -91,6 +94,9 @@ fun VodScreen(
                     playPosition = position; playDuration = duration
                 }
                 override fun onError(msg: String) { playError = msg; buffering = false }
+                override fun onVideoSize(w: Int, h: Int) {
+                    if (w > 0 && h > 0) videoAspect = w.toFloat() / h.toFloat()
+                }
                 override fun onEnded() {
                     if (prefs.autoNext && detail != null && selectedEp < detail!!.episodes.size - 1) {
                         selectedEp += 1
@@ -159,7 +165,7 @@ fun VodScreen(
     val d = detail!!
     if (fullscreen) {
         FullscreenPlayer(engine, d.vod.name, selectedEp, d.episodes.getOrNull(selectedEp)?.name ?: "",
-            playPosition, playDuration, buffering, playError, onExit = { fullscreen = false })
+            playPosition, playDuration, buffering, playError, videoAspect, onExit = { fullscreen = false })
         return
     }
 
@@ -188,7 +194,7 @@ fun VodScreen(
             // 左：播放器（58%）
             Column(Modifier.fillMaxHeight().weight(0.58f).padding(12.dp)) {
                 Box(
-                    Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))
+                    Modifier.fillMaxWidth().aspectRatio(videoAspect).clip(RoundedCornerShape(8.dp))
                         .background(Color.Black),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -286,10 +292,20 @@ private fun FullscreenPlayer(
     duration: Long,
     buffering: Boolean,
     error: String,
+    videoAspect: Float,
     onExit: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        PlayerSurface(engine)
+        // 按视频原始比例居中铺满（超宽/超高自动留黑边），不用强行拉伸
+        BoxWithConstraints(Modifier.align(Alignment.Center).fillMaxSize()) {
+            // 在可用区域内取能完整容纳原始比例的最大尺寸（contain 策略）
+            val fitWidth = maxHeight * videoAspect <= maxWidth
+            val vw = if (fitWidth) maxHeight * videoAspect else maxWidth
+            val vh = if (fitWidth) maxHeight else maxWidth / videoAspect
+            Box(Modifier.align(Alignment.Center).size(vw, vh)) {
+                PlayerSurface(engine)
+            }
+        }
 
         if (buffering) {
             androidx.compose.material3.CircularProgressIndicator(

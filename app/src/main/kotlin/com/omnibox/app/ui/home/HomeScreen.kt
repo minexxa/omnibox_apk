@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,14 +39,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omnibox.app.data.Core
+import com.omnibox.app.data.DoubanHot
 import com.omnibox.app.data.HomeData
 import com.omnibox.app.data.Vod
 import com.omnibox.app.data.parseHome
 import com.omnibox.app.data.rememberImage
+import com.omnibox.app.ui.components.DoubanPoster
 import com.omnibox.app.ui.components.SectionTitle
 import com.omnibox.app.ui.components.StateBox
 import com.omnibox.app.ui.components.TopBarButton
-import com.omnibox.app.ui.components.VodCard
 import com.omnibox.app.ui.theme.AppColors
 import kotlinx.coroutines.delay
 
@@ -60,22 +60,28 @@ fun HomeScreen(
     onOpenFavorites: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // 首页影视数据来自 ubox 豆瓣源（直连 movie.douban.com），Banner/分类仍用内核
     var data by remember { mutableStateOf<HomeData?>(null) }
+    var hot by remember { mutableStateOf<List<Vod>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
 
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(Unit) {
+        hot = DoubanHot.fetch(ctx)
         val resp = Core.home()
         if (resp.optBoolean("ok", true)) {
             data = parseHome(resp)
-        } else {
-            error = resp.optString("error", "豆瓣首页加载失败")
+        }
+        // 豆瓣热播为空且内核也无数据才报错；豆瓣失败但内核有数据时仍展示分类
+        if (hot.isEmpty() && data == null) {
+            error = "豆瓣热播加载失败，请检查网络"
         }
         loading = false
     }
 
     if (loading) { StateBox(loading = true, error = ""); return }
-    if (data == null) {
+    if (data == null && hot.isEmpty()) {
         StateBox(loading = false, error = error, onRetry = null)
         return
     }
@@ -99,9 +105,9 @@ fun HomeScreen(
             Modifier.fillMaxSize(),
             verticalAlignment = Alignment.Top,
         ) {
-            // Banner 轮播（占满一列宽度）
+            // Banner 轮播（占满一列宽度，内核数据，失败则显示占位）
             item {
-                BannerCarousel(data!!.banners)
+                BannerCarousel(data?.banners ?: emptyList())
                 Spacer(Modifier.width(24.dp))
             }
             // 分类入口
@@ -109,16 +115,31 @@ fun HomeScreen(
                 Column(Modifier.width(200.dp)) {
                     SectionTitle("分类浏览")
                     Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        data!!.classes.take(6).forEach { c ->
+                        (data?.classes ?: emptyList()).take(6).forEach { c ->
                             TopBarButton(c.typeName) { onOpenBrowse(c.typeId, c.typeName) }
                         }
                     }
                 }
                 Spacer(Modifier.width(24.dp))
             }
-            // 选电影 / 选剧集 横滑
-            item { VodRow("选电影", data!!.movie.list) { v -> onOpenDetail("douban", v.vodId, v.name, v.pic) } }
-            item { VodRow("选剧集", data!!.tv.list) { v -> onOpenDetail("douban", v.vodId, v.name, v.pic) } }
+            // 豆瓣热播（ubox 豆瓣源 + ubox 卡片样式）
+            if (hot.isNotEmpty()) {
+                item {
+                    Column(Modifier.width(1100.dp)) {
+                        SectionTitle("豆瓣热播")
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                        ) {
+                            itemsIndexed(hot) { idx, vod ->
+                                DoubanPoster(vod = vod, autofocus = idx == 0) {
+                                    onOpenDetail("douban", "", vod.name, vod.pic)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -182,16 +203,3 @@ private fun BannerCarousel(banners: List<com.omnibox.app.data.Banner>) {
     }
 }
 
-@Composable
-private fun VodRow(title: String, list: List<Vod>, onClick: (Vod) -> Unit) {
-    val rowState = rememberLazyListState()
-    Column(Modifier.width(780.dp)) {
-        SectionTitle(title)
-        LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(horizontal = 24.dp)) {
-            itemsIndexed(list) { idx, vod ->
-                VodCard(vod = vod, autofocus = idx == 0) { onClick(vod) }
-            }
-        }
-    }
-}

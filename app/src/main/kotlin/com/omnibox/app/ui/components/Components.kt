@@ -10,6 +10,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -145,6 +146,62 @@ fun VodCard(
             )
             if (vod.remarks.isNotEmpty()) {
                 Text(vod.remarks, color = Color(0xFFB0BEC5), fontSize = 12.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * 豆瓣热播海报卡片 —— 完全对齐 ubox 的 VodPoster 显示：
+ * 圆角海报(aspect 0.68) + 左上角评分角标 + 底部黑底白字片名栏。
+ */
+@Composable
+fun DoubanPoster(
+    vod: Vod,
+    modifier: Modifier = Modifier,
+    autofocus: Boolean = false,
+    onClick: () -> Unit,
+) {
+    TvFocusable(modifier = modifier.width(150.dp), autofocus = autofocus, onClick = onClick) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.68f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(AppColors.CardBg),
+        ) {
+            val img = rememberImage(vod.pic)
+            if (img != null) {
+                Image(img, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Text(
+                    vod.name.take(8), color = Color.Gray, fontSize = 15.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center),
+                )
+            }
+            // 左上角评分角标（ubox: 半透明黑底 "x.x 分"）
+            if (vod.score.isNotEmpty()) {
+                Text(
+                    "${vod.score} 分", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
+                        .background(Color(0x8C000000), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            // 底部黑底白字片名栏（ubox: 居中、单行省略）
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color(0x8C000000))
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    vod.name, color = Color.White, fontSize = 13.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                )
             }
         }
     }

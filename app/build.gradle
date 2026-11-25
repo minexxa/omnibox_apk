@@ -4,11 +4,11 @@ plugins {
     id "org.jetbrains.kotlin.plugin.compose"
 }
 
-// 打包内核提供的两个 ABI（libomnibox_core.so 由 omnibox_android_core 编译产出）
-// 本地测试可用 -Pabi=armeabi-v7a 只打单个 ABI，例如只出 v7a 包
+// 只打包 armeabi-v7a（按当前需求：APK 仅编译 armv7a）
+// 如需其他 ABI，可用 -Pabi=arm64-v8a 覆盖
 def abiList = project.hasProperty("abi")
     ? [project.property("abi").toString()]
-    : ["arm64-v8a", "armeabi-v7a"]
+    : ["armeabi-v7a"]
 
 android {
     namespace = "com.omnibox.app"
