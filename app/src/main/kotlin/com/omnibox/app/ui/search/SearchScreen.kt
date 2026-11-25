@@ -158,12 +158,8 @@ private fun TvLeftPanel(
         modifier = Modifier.fillMaxSize().padding(12.dp),
     ) {
         item {
-            // 返回 + 搜索范围说明（内核 search 走 src=all 聚合全部已启用脚本）
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TvButton("返回", height = 48.dp, onTap = onBack)
-                Spacer(Modifier.width(10.dp))
-                Text("全部源站", color = Color(0xFFBBBBBB), fontSize = 15.sp)
-            }
+            // 搜索范围说明（内核 search 走 src=all 聚合全部已启用脚本）
+            Text("全部源站", color = Color(0xFFBBBBBB), fontSize = 15.sp)
             Spacer(Modifier.height(10.dp))
             // 只读输入框：焦点态双层描边（外 3dp 半透明黑 + 内 2dp 白），输入全靠下方键盘
             Box(

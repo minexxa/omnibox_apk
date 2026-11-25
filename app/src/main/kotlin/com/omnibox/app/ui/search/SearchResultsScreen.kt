@@ -64,6 +64,10 @@ fun SearchResultsScreen(
     var page by remember { mutableStateOf(1) }
     var sourceFilter by remember { mutableStateOf("all") }
 
+    LaunchedEffect(Unit) {
+        Core.refreshSpiderLabels()
+    }
+
     LaunchedEffect(query, page) {
         loading = true
         val resp = Core.search(prefs.lastSource, query, page)
@@ -82,6 +86,7 @@ fun SearchResultsScreen(
         loading = false
     }
 
+    // 筛选键仍是原始 source id（跳详情/去重需要），显示时用可读 label
     val sources = remember(result) {
         result?.list?.map { it.source }?.filter { it.isNotBlank() }?.distinct().orEmpty()
     }
@@ -96,10 +101,9 @@ fun SearchResultsScreen(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TopBackButton(onBack)
             Text(
                 "搜索结果：$query", color = Color.White, fontSize = 20.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp),
+                fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
@@ -129,7 +133,7 @@ fun SearchResultsScreen(
                             }
                             items(sources) { s ->
                                 SourceTile(
-                                    name = s,
+                                    name = Core.sourceLabel(s),
                                     selected = sourceFilter == s,
                                     onClick = { sourceFilter = s },
                                 )
@@ -151,7 +155,8 @@ fun SearchResultsScreen(
                                         DoubanPoster(
                                             vod = vod,
                                             autofocus = idx == 0,
-                                            badge = vod.source.ifBlank { null },
+                                            // 角标显示脚本可读名（如"瓜子APP"），跳转仍用原始 source id
+                                            badge = Core.sourceLabel(vod.source).ifBlank { null },
                                             note = vod.remarks.ifBlank { null },
                                             width = 150.dp,
                                         ) {
@@ -207,17 +212,6 @@ private fun SourceTile(name: String, selected: Boolean, onClick: () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
             )
         }
-    }
-}
-
-@Composable
-private fun TopBackButton(onBack: () -> Unit) {
-    TvFocusable(onClick = onBack, radius = 8.dp) {
-        Text(
-            "返回", color = Color.White, fontSize = 16.sp,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp))
-                .background(Color(0x6C3D3D3D)).padding(horizontal = 16.dp, vertical = 10.dp),
-        )
     }
 }
 

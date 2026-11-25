@@ -2,6 +2,7 @@ package com.omnibox.app.ui.settings
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -52,11 +53,11 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     var section by remember { mutableStateOf("main") } // main / spiders / import / player / system
 
+    // 子段时返回键回到设置主菜单；main 时不拦截，交给全局 BackHandler 退出设置页
+    BackHandler(enabled = section != "main") { section = "main" }
+
     Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            TopBarButton(if (section == "main") "返回" else "上一步") {
-                if (section == "main") onBack() else section = "main"
-            }
             Text(
                 when (section) {
                     "spiders" -> "脚本管理"
@@ -66,7 +67,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                     else -> "设置"
                 },
                 color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp),
             )
         }
 

@@ -38,6 +38,50 @@ object Core {
 
     suspend fun spidersList(): JSONObject = call("spiders_list")
 
+    // ---- 脚本 id → 可读名称（搜索结果显示用；id 是脚本名 UTF-8 字节的 hex，直接显示会是一串数字）----
+    @Volatile
+    private var spiderLabels: Map<String, String> = emptyMap()
+
+    /** 拉取脚本列表并刷新 id→label 缓存。进入搜索页前调用。 */
+    suspend fun refreshSpiderLabels() {
+        val resp = spidersList()
+        val arr = runCatching { resp.optJSONArray("list") }.getOrNull() ?: return
+        val map = mutableMapOf<String, String>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "")
+            val label = o.optString("display_name", "").ifEmpty { o.optString("name", "") }
+            if (id.isNotBlank() && label.isNotBlank()) map[id] = label
+        }
+        spiderLabels = map
+    }
+
+    /**
+     * 把内核返回的来源 id 转成可读名称。
+     * 1) 命中脚本 label 缓存 → 用缓存（如"瓜子APP"）；
+     * 2) 否则尝试把 hex id 当 UTF-8 解码（如 e7-93-9c-e5-ad-90 → "瓜子"）；
+     * 3) 都失败则原样返回。
+     */
+    fun sourceLabel(id: String): String {
+        if (id.isBlank()) return id
+        spiderLabels[id]?.let { if (it.isNotBlank()) return it }
+        return hexUtf8(id) ?: id
+    }
+
+    /** "e7-93-9c-e5-ad-90" / "e7939ce5ad90" → UTF-8 文本；非 hex 或解码失败返回 null。 */
+    private fun hexUtf8(s: String): String? = runCatching {
+        val hex = s.replace("-", "")
+        if (hex.length < 2 || hex.length % 2 != 0 || !hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+            return null
+        }
+        val bytes = ByteArray(hex.length / 2) { i ->
+            ((Character.digit(hex[i * 2], 16) shl 4) + Character.digit(hex[i * 2 + 1], 16)).toByte()
+        }
+        val text = String(bytes, Charsets.UTF_8)
+        // 只接受解码后全是可读字符的结果，避免把普通 id 误判
+        text.takeIf { it.isNotBlank() && it.all { c -> !c.isISOControl() } }
+    }.getOrNull()
+
     suspend fun historyList(): JSONObject = call("history_list")
 
     suspend fun historyAdd(

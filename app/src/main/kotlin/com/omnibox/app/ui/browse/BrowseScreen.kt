@@ -65,9 +65,7 @@ fun BrowseScreen(
             Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TopBarButton("返回") { onBack() }
-            Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp))
+            Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
         when {

@@ -47,9 +47,7 @@ fun FavoritesScreen(
 
     Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            TopBarButton("返回") { onBack() }
-            Text("我的收藏", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp))
+            Text("我的收藏", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             if (keys.isNotEmpty()) {
                 TopBarButton("清空收藏") {

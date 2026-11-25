@@ -60,9 +60,7 @@ fun HistoryScreen(
 
     Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            TopBarButton("返回") { onBack() }
-            Text("观看历史", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp))
+            Text("观看历史", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             TopBarButton("清空历史") {
                 scope.launch {
