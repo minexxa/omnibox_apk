@@ -9,7 +9,7 @@
 
     <application
         android:name=".OmniBoxApp"
-        android:banner="@mipmap/ic_launcher"
+        android:banner="@mipmap/ic_banner"
         android:icon="@mipmap/ic_launcher"
         android:label="OmniBox TV"
         android:usesCleartextTraffic="true">
