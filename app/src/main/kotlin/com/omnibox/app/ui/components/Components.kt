@@ -421,7 +421,7 @@ fun OmniListItem(
     modifier: Modifier = Modifier,
     supporting: String? = null,
     leading: (@Composable BoxScope.() -> Unit)? = null,
-    trailing: (@Composable BoxScope.() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(10.dp)
     val supportingSlot: (@Composable () -> Unit)? =
