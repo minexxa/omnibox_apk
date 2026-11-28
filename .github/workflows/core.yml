@@ -1,0 +1,77 @@
+name: Build Android Core
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-android:
+    name: android-aarch64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: rust-core
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          add-to-path: true
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android-arm64
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Workaround NDK r23+ missing libgcc
+        shell: bash
+        run: |
+          NDK_HOME="${{ steps.ndk.outputs.ndk-path }}"
+          find "${NDK_HOME}" -name "libunwind.a" -print | while read -r f; do
+            dir=$(dirname "$f")
+            echo "INPUT(-lunwind)" > "${dir}/libgcc.a"
+          done
+
+      - name: Build release (aarch64-android)
+        run: cargo ndk --target aarch64-linux-android --platform 26 build --release --locked
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+
+      - name: Check artifact
+        run: |
+          ls -l target/aarch64-linux-android/release/libomnibox_core.so
+          file target/aarch64-linux-android/release/libomnibox_core.so
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libomnibox_core-android-arm64
+          path: target/aarch64-linux-android/release/libomnibox_core.so
+          if-no-files-found: error
+
+      - name: Publish to Release (tag core-latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: core-latest
+          prerelease: true
+          overwrite_files: true
+          files: target/aarch64-linux-android/release/libomnibox_core.so
