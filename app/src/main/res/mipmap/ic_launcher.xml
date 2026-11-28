@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 兼容 API 24/25 的 legacy 图标：深蓝渐变底 + 影视盒子 + 播放键 -->
+    <path android:pathData="M0,0h108v108H0z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="108" android:endY="108">
+                <item android:offset="0" android:color="#FF16324A" />
+                <item android:offset="0.55" android:color="#FF0D1C2B" />
+                <item android:offset="1" android:color="#FF070D14" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M54,54m-42,0a42,42 0 1,0 84,0a42,42 0 1,0 -84,0"
+        android:fillColor="#140CADE2" />
+    <path
+        android:pathData="M32,34h44a10,10 0 0 1 10,10v20a10,10 0 0 1 -10,10H32a10,10 0 0 1 -10,-10V44a10,10 0 0 1 10,-10z"
+        android:fillColor="#14FFFFFF"
+        android:strokeColor="#D9FFFFFF"
+        android:strokeWidth="3.5" />
+    <path android:pathData="M46,41 L46,67 L70,54 Z" android:fillColor="#FF0CADE2" />
+</vector>

@@ -1,0 +1,111 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "org.jetbrains.kotlin.plugin.compose"
+}
+
+// 只打包 armeabi-v7a（按当前需求：APK 仅编译 armv7a）
+// 如需其他 ABI，可用 -Pabi=arm64-v8a 覆盖
+def abiList = project.hasProperty("abi")
+    ? [project.property("abi").toString()]
+    : ["armeabi-v7a"]
+
+android {
+    namespace = "com.omnibox.app"
+    compileSdk = 36
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // 必须与 jni_bridge.rs 的函数名 Java_com_omnibox_app_OmniBoxNative_* 一致
+        applicationId = "com.omnibox.app"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
+        ndk {
+            abiFilters abiList as String[]
+        }
+        // 仅保留中文资源，剔除依赖库里海量其他语言的 string/values
+        resConfigs "zh", "en"
+    }
+
+    signingConfigs {
+        release {
+            enableV2Signing = true
+            enableV3Signing = true
+            def envStore = System.getenv("RELEASE_STORE_FILE")
+            if (envStore != null && file(envStore).exists()) {
+                storeFile file(envStore)
+                storePassword System.getenv("RELEASE_STORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // R8 代码压缩 + 资源压缩：大幅精简 DEX 与未使用资源
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            def envStore = System.getenv("RELEASE_STORE_FILE")
+            if (envStore != null && file(envStore).exists()) {
+                signingConfig = signingConfigs.release
+            } else {
+                def debugStore = new File(System.getProperty("user.home"), ".android/debug.keystore")
+                if (debugStore.exists()) {
+                    signingConfig = signingConfigs.debug
+                }
+            }
+        }
+        debug {
+            minifyEnabled = false
+        }
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    sourceSets {
+        main {
+            kotlin.srcDirs += "src/main/kotlin"
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.activity:activity-compose:1.9.3"
+    // ViewModel / lifecycle-runtime-compose 未被使用，删除显式声明（activity-compose 会传递所需部分）
+
+    def composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    implementation composeBom
+    implementation "androidx.compose.ui:ui"
+    implementation "androidx.compose.ui:ui-graphics"
+    implementation "androidx.compose.material3:material3"
+    // material-icons-extended（数千图标）未被使用，已移除
+    implementation "androidx.compose.foundation:foundation"
+    // Compose for TV：Surface 聚焦缩放 / 描边 / 光晕等 TV 标准焦点效果
+    implementation "androidx.tv:tv-material:1.0.0"
+
+    // 播放器：Media3 ExoPlayer，HLS 与 OkHttp 数据源（支持内核 play 返回的 header 注入）
+    implementation "androidx.media3:media3-exoplayer:1.11.1"
+    implementation "androidx.media3:media3-common:1.11.1"
+    implementation "androidx.media3:media3-exoplayer-hls:1.11.1"
+    implementation "androidx.media3:media3-datasource-okhttp:1.11.1"
+    // DataSource 里自建 trust-all OkHttp：显式声明避免依赖传递不确定性
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
+    // androidx.collection 未被直接使用，删除显式声明
+    // org.json 由 Android 平台提供，无需额外依赖
+}
