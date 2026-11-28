@@ -176,20 +176,51 @@ pub async fn unified_search(src: &str, wd: &str, page: i64) -> Value {
         });
     }
 
-    let mut futures = Vec::new();
+    // 结果缓存（5 分钟）：同关键词/同页重复搜索直接返回
+    let cache_key = format!("search:{}:{}:{}", src, wd, page);
+    if let Some(v) = crate::cache::get(&cache_key) {
+        return v;
+    }
+
+    // 并发所有脚本，逐个收集：不再等最慢的那个。
+    //  - 单脚本上限 12s；全局硬上限 12s
+    //  - 一旦已有结果，再宽限 2.5s 给其余脚本，之后直接返回已拿到的
+    use futures::stream::{FuturesUnordered, StreamExt};
+    let mut pending = FuturesUnordered::new();
     for s in &targets {
         let id = s.id.clone();
         let params = json!({"keyword": wd, "wd": wd, "page": page});
-        futures.push(async move {
+        pending.push(async move {
             let res = tokio::time::timeout(
-                Duration::from_secs(35),
+                Duration::from_secs(12),
                 dispatch(&id, "search", params),
             )
             .await;
             (id, res)
         });
     }
-    let results = futures::future::join_all(futures).await;
+    let total = targets.len();
+    let start = tokio::time::Instant::now();
+    let hard = start + Duration::from_secs(12);
+    let mut grace: Option<tokio::time::Instant> = None;
+    let mut results = Vec::new();
+    loop {
+        let limit = match grace {
+            Some(g) if g < hard => g,
+            _ => hard,
+        };
+        match tokio::time::timeout_at(limit, pending.next()).await {
+            Ok(Some((id, res))) => {
+                let has = matches!(&res, Ok(Ok(raw)) if !normalize_items(raw, &id).is_empty());
+                results.push((id, res));
+                if has && grace.is_none() {
+                    grace = Some(tokio::time::Instant::now() + Duration::from_millis(2500));
+                }
+            }
+            _ => break, // 全部完成 / 到达宽限或硬上限
+        }
+    }
+    let unfinished = total - results.len();
 
     let mut merged = Vec::new();
     let mut errors = Vec::new();
@@ -208,15 +239,26 @@ pub async fn unified_search(src: &str, wd: &str, page: i64) -> Value {
             }
         }
     }
+    if unfinished > 0 {
+        errors.push(format!("{} 个脚本响应过慢，已跳过", unfinished));
+    }
 
     let pagecount = (merged.len() / 20 + 1).max(1);
-    json!({
+    let out = json!({
         "ok": true,
         "list": merged,
         "page": page,
         "pagecount": pagecount,
         "errors": errors,
-    })
+    });
+    if !merged_is_empty(&out) && unfinished == 0 {
+        crate::cache::set(&cache_key, out.clone(), Duration::from_secs(300));
+    }
+    out
+}
+
+fn merged_is_empty(v: &Value) -> bool {
+    v.get("list").and_then(Value::as_array).map_or(true, |a| a.is_empty())
 }
 
 pub async fn detail(src: &str, id: &str) -> Value {

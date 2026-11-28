@@ -551,6 +551,28 @@ async fn js_request(url: String, opts_json: String) -> rquickjs::Result<String> 
     })
 }
 
+static CLIENTS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<usize, reqwest::Client>>> =
+    std::sync::OnceLock::new();
+
+fn shared_client(max_redirects: usize, policy: reqwest::redirect::Policy) -> anyhow::Result<reqwest::Client> {
+    let m = CLIENTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut g = m.lock().map_err(|_| anyhow::anyhow!("客户端锁失败"))?;
+    if let Some(c) = g.get(&max_redirects) {
+        return Ok(c.clone());
+    }
+    let c = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(6))
+        .pool_idle_timeout(Duration::from_secs(60))
+        .pool_max_idle_per_host(8)
+        .tcp_nodelay(true)
+        .danger_accept_invalid_certs(true)
+        .redirect(policy)
+        .build()
+        .map_err(|e| anyhow::anyhow!("HTTP 客户端失败: {e}"))?;
+    g.insert(max_redirects, c.clone());
+    Ok(c)
+}
+
 async fn js_request_inner(url: &str, opts_json: &str) -> anyhow::Result<JsonValue> {
     let opts: JsonValue = serde_json::from_str(opts_json).unwrap_or_else(|_| serde_json::json!({}));
     let method = opts.get("method").and_then(JsonValue::as_str).unwrap_or("GET").to_string();
@@ -581,17 +603,12 @@ async fn js_request_inner(url: &str, opts_json: &str) -> anyhow::Result<JsonValu
         }
         attempt.follow()
     });
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(timeout_ms))
-        .danger_accept_invalid_certs(true)
-        .redirect(policy)
-        .build()
-        .map_err(|e| anyhow::anyhow!("HTTP 客户端失败: {e}"))?;
+    // 复用按 maxRedirects 分组的共享客户端：避免每次请求重建 TLS 配置 / 丢失连接池（Android 上很慢）
+    let client = shared_client(max_redirects, policy)?;
 
-    let mut req = client.request(
-        method.parse().unwrap_or(reqwest::Method::GET),
-        url_parsed,
-    );
+    let mut req = client
+        .request(method.parse().unwrap_or(reqwest::Method::GET), url_parsed)
+        .timeout(Duration::from_millis(timeout_ms));
     if let Some(headers) = opts.get("headers").and_then(JsonValue::as_object) {
         for (k, v) in headers {
             let sv = match v {
