@@ -2,9 +2,7 @@ name: Build Android Core
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main, master]
-
+  
 permissions:
   contents: write
 
@@ -13,7 +11,7 @@ env:
 
 jobs:
   build-android:
-    name: android-aarch64
+    name: android-arm64-armv7
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,7 +22,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
@@ -51,27 +49,36 @@ jobs:
             echo "INPUT(-lunwind)" > "${dir}/libgcc.a"
           done
 
-      - name: Build release (aarch64-android)
-        run: cargo ndk --target aarch64-linux-android --platform 26 build --release --locked
+      # 一次构建两个 ABI：arm64-v8a（aarch64）+ armeabi-v7a（armv7a）
+      - name: Build release (arm64-v8a + armeabi-v7a)
+        run: |
+          cargo ndk --target arm64-v8a --target armeabi-v7a --platform 26 \
+            -o "$GITHUB_WORKSPACE/dist-jni" build --release --locked
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          # 安卓端优先体积：opt-level=s（Windows 构建不受影响）
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: s
 
-      - name: Check artifact
+      # Release 资产不能同名：按 ABI 命名
+      - name: Collect artifacts
         run: |
-          ls -l target/aarch64-linux-android/release/libomnibox_core.so
-          file target/aarch64-linux-android/release/libomnibox_core.so
+          mkdir -p dist
+          cp dist-jni/arm64-v8a/libomnibox_core.so   dist/libomnibox_core-arm64-v8a.so
+          cp dist-jni/armeabi-v7a/libomnibox_core.so dist/libomnibox_core-armeabi-v7a.so
+          file dist/*.so
+          ls -l dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: libomnibox_core-android-arm64
-          path: target/aarch64-linux-android/release/libomnibox_core.so
+          name: libomnibox_core-android
+          path: dist/*.so
           if-no-files-found: error
 
-      - name: Publish to Release (tag core-latest)
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: core-latest
           prerelease: true
           overwrite_files: true
-          files: target/aarch64-linux-android/release/libomnibox_core.so
+          files: dist/*.so
